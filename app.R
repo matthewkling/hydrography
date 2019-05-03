@@ -15,7 +15,7 @@ names(clim) <- names(clim) %>%
 
 
 # initalize location
-s <- data.frame(lat=37.801064, lon=-122.478557)
+s <- data.frame(lat=37.871444, lon=-122.262277)
 coordinates(s) <- c("lon", "lat")
 ll <- crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
 crs(s) <- ll
@@ -27,6 +27,8 @@ data <- raster::extract(clim, s) %>%
       arrange(var, month)
 
 
+bg <- "black"
+
 
 # Define UI for application
 ui <- navbarPage("shape of the seasons",
@@ -37,24 +39,37 @@ ui <- navbarPage("shape of the seasons",
                           
                           fluidRow(
                                 column(4,
-                                       leafletOutput("map")
+                                       h3("geography"),
+                                       leafletOutput("map"),
+                                       p("Click map to change locations.")
                                 ),
                                 column(4,
+                                       h3("climatology"),
                                        plotOutput("cycle")
                                 ),
                                 column(4,
+                                       h3("hydrology"),
                                        plotOutput("hydro")
                                 )
                           )
                  ),
                  
-                 tabPanel("about")
+                 tabPanel("about",
+                          p("Tool created by",
+                            tagList(a("Matthew Kling.", href="http://matthewkling.net"))),
+                          p("Source code at",
+                            tagList(a("GitHub.", href="https://github.com/matthewkling/hydrography"))),
+                          p("Climate data from",
+                            tagList(a("CHELSA.", href="http://chelsa-climate.org/"))),
+                          p("Hydrological variables derived using",
+                            tagList(a("climatica.", href="https://github.com/matthewkling/climatica")))
+                 )
 )
 
 # Define server logic
 server <- function(input, output) {
       
-      site <- reactiveValues(point = s, data = data)
+      site <- reactiveValues(point = s, data = data, ll=coordinates(s))
       observeEvent(input$map_click, {
             s <- data.frame(lat=input$map_click$lat, lon=input$map_click$lng)
             coordinates(s) <- c("lon", "lat")
@@ -66,28 +81,26 @@ server <- function(input, output) {
                   separate(var, c("var", "month"), sep="_") %>%
                   mutate(month=as.integer(month)) %>%
                   arrange(var, month)
+            site$ll <- coordinates(s)
       })
       
+      marker <- makeAwesomeIcon("stats", markerColor="red")
+      
+      
       output$map <- renderLeaflet({
-            latlon <- coordinates(site$point)
-            #Stamen.TonerBackground
-            #Esri.WorldTerrain
-            #Esri.WorldGrayCanvas
             leaflet() %>%
-                  setView(lng=latlon[1], lat=latlon[2], zoom=2) %>%
+                  setView(lng=coordinates(s)[1], 
+                          lat=coordinates(s)[2], zoom=2) %>%
                   addProviderTiles(providers$Esri.WorldImagery) %>%
                   addProviderTiles(providers$Stamen.TonerLines) %>%
-                  addProviderTiles(providers$Stamen.TonerLabels) %>%
-                  addMarkers(lng=latlon[1], lat=latlon[2])
+                  addProviderTiles(providers$Stamen.TonerLabels)
       })
       
       observe({
-            click <- input$map_click
-            latlon <- coordinates(site$point)
-            
             leafletProxy("map") %>%
                   clearMarkers() %>%
-                  addMarkers(lng=latlon[1], lat=latlon[2])
+                  addAwesomeMarkers(lng=site$ll[1], lat=site$ll[2], 
+                                    icon=marker)
       })
       
       output$cycle <- renderPlot({
@@ -105,10 +118,10 @@ server <- function(input, output) {
                   theme_minimal() +
                   theme(legend.position="top",
                         text=element_text(color="white", size=20, face="bold"),
-                        panel.background=element_rect(fill="black"),
-                        plot.background=element_rect(fill="black")) +
-                  guides(color=guide_colorbar(barwidth=20)) +
-                  labs(x="temperature (C)", y="precipitation (mm)")
+                        panel.background=element_rect(fill=bg, color=NA),
+                        plot.background=element_rect(fill=bg, color=NA)) +
+                  guides(color=guide_colorbar(barwidth=15)) +
+                  labs(x="temperature (deg C)", y="precipitation (mm)")
       })
       
       output$hydro <- renderPlot({
@@ -119,7 +132,7 @@ server <- function(input, output) {
             
             # get S0 values for all 12 months
             S0 <- sapply(1:12, monthly_S0, 
-                         latitude=coordinates(site$point)[2])
+                         latitude=site$ll[2])
             
             # monthly water balance variables
             pet <- hargreaves(S0, sd$temp, sd$tmin, sd$tmax) *
@@ -127,6 +140,7 @@ server <- function(input, output) {
             pet[sd$temp<0] <- 0 # per Wang et al 2012
             ppt <- sd$prec
             
+            # add data points where PPT & PET curves cross, to make area plot behave
             months <- 1:12
             for(i in 1:11){
                   i <- c(i, i+1)
@@ -135,10 +149,8 @@ server <- function(input, output) {
                   
                   cross <- (peti[1] > ppti[1]) != (peti[2] > ppti[2])
                   if(cross){
-                        #(peti[2] - peti[1])*x + peti[1] = (ppti[2] - ppti[1])*x + ppti[1]
-                        #(peti[2] - peti[1])*x - (ppti[2] - ppti[1])*x = ppti[1] - peti[1]
-                        #x * ((peti[2] - peti[1]) - (ppti[2] - ppti[1])) = ppti[1] - peti[1]
-                        x  <- (ppti[1] - peti[1]) / ((peti[2] - peti[1]) - (ppti[2] - ppti[1]))  
+                        x  <- (ppti[1] - peti[1]) / ((peti[2] - peti[1]) - 
+                                                           (ppti[2] - ppti[1]))  
                         y <- (peti[2] - peti[1])*x + peti[1]
                         x <- i[1] + x
                         months <- c(months, x)
@@ -166,15 +178,15 @@ server <- function(input, output) {
                             size=1) +
                   geom_point(data=filter(d, var %in% c("ppt", "pet"), 
                                          month %in% 1:12),
-                             size=2) +
+                             size=3) +
                   scale_fill_manual(values=colors) +
                   scale_color_manual(values=colors) +
                   scale_x_continuous(breaks=1:12) +
                   theme_minimal() +
                   theme(legend.position="top",
                         text=element_text(color="white", size=20, face="bold"),
-                        panel.background=element_rect(fill="black"),
-                        plot.background=element_rect(fill="black")) +
+                        panel.background=element_rect(fill=bg, color=NA),
+                        plot.background=element_rect(fill=bg, color=NA)) +
                   labs(x="month", y="mm", color=NULL, fill=NULL)
       })
       
