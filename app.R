@@ -31,38 +31,47 @@ bg <- "black"
 
 
 # Define UI for application
-ui <- navbarPage("shape of the seasons",
+ui <- navbarPage("the shape of the seasons",
                  
                  theme = shinytheme("slate"),
                  
-                 tabPanel("tool",
+                 tabPanel("explore",
                           
                           fluidRow(
                                 column(4,
-                                       h3("geography"),
-                                       leafletOutput("map"),
-                                       p("Click map to change locations.")
+                                       h3("Geography"),
+                                       p("Click map to change locations."),
+                                       leafletOutput("map")#,
+                                       #br(),
+                                       #fluidRow(column(6,
+                                       #                selectInput("era", "Timeframe",
+                                       #                            c("1979-2013", "2061-2080"))),
+                                       #         column(6,
+                                       #                selectInput("mode", "Mode",
+                                       #                            c("basic", "compare locations", "compare timeframes"))))
                                 ),
                                 column(4,
-                                       h3("climatology"),
+                                       h3("Climatology"),
+                                       p("The seasonal cycle of heat and precipitation."),
                                        plotOutput("cycle")
                                 ),
                                 column(4,
-                                       h3("hydrology"),
+                                       h3("Hydrology"),
+                                       p("Hydrologic water balance through the year."),
                                        plotOutput("hydro")
                                 )
                           )
                  ),
                  
                  tabPanel("about",
-                          p("Tool created by",
-                            tagList(a("Matthew Kling.", href="http://matthewkling.net"))),
-                          p("Source code at",
-                            tagList(a("GitHub.", href="https://github.com/matthewkling/hydrography"))),
                           p("Climate data from",
                             tagList(a("CHELSA.", href="http://chelsa-climate.org/"))),
                           p("Hydrological variables derived using",
-                            tagList(a("climatica.", href="https://github.com/matthewkling/climatica")))
+                            tagList(a("climatica.", href="https://github.com/matthewkling/climatica"))),
+                          p("Source code at",
+                            tagList(a("GitHub.", href="https://github.com/matthewkling/hydrography"))),
+                          p("Tool created by",
+                            tagList(a("Matthew Kling.", href="http://matthewkling.net")))
                  )
 )
 
@@ -86,11 +95,9 @@ server <- function(input, output) {
       
       marker <- makeAwesomeIcon("stats", markerColor="red")
       
-      
       output$map <- renderLeaflet({
             leaflet() %>%
-                  setView(lng=coordinates(s)[1], 
-                          lat=coordinates(s)[2], zoom=2) %>%
+                  setView(lng=-45, lat=18, zoom=1) %>%
                   addProviderTiles(providers$Esri.WorldImagery) %>%
                   addProviderTiles(providers$Stamen.TonerLines) %>%
                   addProviderTiles(providers$Stamen.TonerLabels)
@@ -111,13 +118,14 @@ server <- function(input, output) {
                   rbind(filter(., month==1)) %>%
                   ggplot(aes(temp/10, prec, color=month)) +
                   geom_path(size=1) +
-                  geom_point(size=2) +
+                  geom_point(size=3) +
                   scale_color_gradientn(colors=c("cyan", "green", "yellow", 
                                                  "red", "magenta", "blue"), 
                                         breaks=1:12) +
                   theme_minimal() +
                   theme(legend.position="top",
                         text=element_text(color="white", size=20, face="bold"),
+                        panel.grid=element_blank(),
                         panel.background=element_rect(fill=bg, color=NA),
                         plot.background=element_rect(fill=bg, color=NA)) +
                   guides(color=guide_colorbar(barwidth=15)) +
@@ -185,6 +193,7 @@ server <- function(input, output) {
                   theme_minimal() +
                   theme(legend.position="top",
                         text=element_text(color="white", size=20, face="bold"),
+                        panel.grid=element_blank(),
                         panel.background=element_rect(fill=bg, color=NA),
                         plot.background=element_rect(fill=bg, color=NA)) +
                   labs(x="month", y="mm", color=NULL, fill=NULL)
